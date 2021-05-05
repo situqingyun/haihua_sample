@@ -21,7 +21,10 @@ from model.modeling_electra import ElectraForMultipleChoiceDUMA
 import torch
 
 import json
+import time
 
+# code executed starting time
+start_time = time.time()
 
 class CommonDataProcessor(DCMNMultipleChoiceProcessor):
 
@@ -160,7 +163,7 @@ def main():
         tokenizer = tokenizer_class.from_pretrained(model_paths[model_type], do_lower_case=args.do_lower_case)
 
         # processor = CommonDataProcessor(data_dir=args.data_dir, tokenizer=tokenizer, prefix=prefix)
-        processor = CommonDataProcessor(data_dir=args.input_dir, tokenizer=tokenizer, prefix=prefix)
+        processor = CommonDataProcessor(data_dir=input_dir, tokenizer=tokenizer, prefix=prefix)
         label_list = processor.get_labels()
         num_labels = len(label_list)
         args.num_labels = num_labels
@@ -185,13 +188,17 @@ def main():
 
         model_state_dict = {
             'dcmn': 'pretrained_models/dcmn.pt',
-            'duma_zuijia': 'pretrained_models/duma_zuijia.pt',
             'duma_256': 'pretrained_models/duma_256.pt',
-            'roberta_duma': 'pretrained_models/roberta_duma.pt'
+            'roberta_duma': 'pretrained_models/roberta_duma.pt',
+            'duma_zuijia': 'pretrained_models/duma_zuijia.pt'
         }
 
+        model_type_list = ['dcmn', 'duma_256', 'roberta_duma', 'duma_zuijia']
+
         i = 0
-        for key, state_dict_file in model_state_dict.items():
+        # for key, state_dict_file in model_state_dict.items():
+        for key in model_type_list:
+            state_dict_file = model_state_dict[key]
             config_class, model_class, tokenizer_class, tokenize_len, model_type = models_detail[key]
             # tokenizer = tokenizer_class.from_pretrained(args.model_path, do_lower_case=args.do_lower_case)
             # processor = CommonDataProcessor(data_dir=args.data_dir, tokenizer=tokenizer, prefix=prefix)
@@ -202,14 +209,23 @@ def main():
                                                   cache_dir=args.cache_dir if args.cache_dir else None)
             model = model_class.from_pretrained(args.model_path, config=config)  # , mirror='tuna'
             model.to(args.device)
+            if key == 'duma_zuijia':
+                zuijia_start_time = time.time()
             model.load_state_dict(torch.load(state_dict_file))
             trainer.predict(model, test_dataset=test_dataset, prefix=str(i))
+
             if key == 'duma_zuijia':
-                for j in range(5):
-                    data_file = 'pretrained_models/nezha-cn-base_fold_{}.pt'.format(j)
-                    model.load_state_dict(torch.load(data_file))
-                    trainer.predict(model, test_dataset=test_dataset, prefix=str(i))
-                    i += 1
+                zuijia_end_time = time.time()
+                zuijia_execute = zuijia_end_time - zuijia_start_time
+            if key == 'duma_zuijia':
+                for j in [3, 0, 1, 2, 4]:
+                    now_ = time.time()
+                    remainder_time = 80*60 - (now_-zuijia_execute)
+                    if remainder_time>(zuijia_execute+3*60):
+                        data_file = 'pretrained_models/nezha-cn-base_fold_{}.pt'.format(j)
+                        model.load_state_dict(torch.load(data_file))
+                        trainer.predict(model, test_dataset=test_dataset, prefix=str(i))
+                        i += 1
             i += 1
 
         final_process(output_dir, args.output_file, args.input_file)
