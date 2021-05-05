@@ -12,7 +12,7 @@ def random_result(input_path, output_file):
         for i in j:
             for q in i['Questions']:
                 w.write(q['Q_id'] + ',' + ['A','B','C','D'][random.randint(0,3)] + '\n')
-                
+    print('code is executed!')
     
 
 if __name__ == "__main__":
